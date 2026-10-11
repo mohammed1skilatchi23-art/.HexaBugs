@@ -1,0 +1,67 @@
+name: Build HexaBugs Android APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Create Android project around the existing game
+        run: |
+          test -s index.html || (echo 'index.html is missing' && exit 1)
+          mkdir -p www
+          cp index.html www/index.html
+          cat > package.json <<'EOF'
+          {
+            "name": "hexabugs-android",
+            "version": "1.0.0",
+            "private": true,
+            "dependencies": {
+              "@capacitor/android": "6.2.1",
+              "@capacitor/core": "6.2.1"
+            },
+            "devDependencies": {
+              "@capacitor/cli": "6.2.1"
+            }
+          }
+          EOF
+          cat > capacitor.config.json <<'EOF'
+          {
+            "appId": "com.hexabugs.game",
+            "appName": "HexaBugs",
+            "webDir": "www"
+          }
+          EOF
+          npm install
+          npx cap add android
+          npx cap sync android
+      - name: Build debug APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: HexaBugs-debug-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
