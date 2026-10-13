@@ -15,18 +15,22 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - name: Create Android project around the existing game
+
+      - name: Prepare the latest game and Android wrapper
         run: |
           test -s index.html || (echo 'index.html is missing' && exit 1)
+          test -s assets/hexabugs-icon.png.b64 || (echo 'Launcher icon data is missing' && exit 1)
           mkdir -p www
           cp index.html www/index.html
           cat > package.json <<'EOF'
@@ -53,11 +57,26 @@ jobs:
           npm install
           npx cap add android
           npx cap sync android
+
+      - name: Apply HexaBugs phone launcher icon
+        run: |
+          base64 --decode assets/hexabugs-icon.png.b64 > /tmp/hexabugs-icon.png
+          test -s /tmp/hexabugs-icon.png || (echo 'Launcher icon decode failed' && exit 1)
+          for d in android/app/src/main/res/mipmap-*; do
+            [ -d "$d" ] || continue
+            rm -f "$d/ic_launcher.xml" "$d/ic_launcher_round.xml"
+            if [[ "$d" != *anydpi* ]]; then
+              cp /tmp/hexabugs-icon.png "$d/ic_launcher.png"
+              cp /tmp/hexabugs-icon.png "$d/ic_launcher_round.png"
+            fi
+          done
+
       - name: Build debug APK
         run: |
           cd android
           chmod +x gradlew
           ./gradlew --no-daemon assembleDebug
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
